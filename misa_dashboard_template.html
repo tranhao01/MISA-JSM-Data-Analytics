@@ -1,0 +1,92 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>MISA Visualization Template</title></head>
+<body style="font-family: Arial, sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px;">
+<h1>MISA Visualization Template (Auto‑generated)</h1>
+<p><strong>Nguồn dữ liệu:</strong> misa_simulated_dataset_quick.xlsx</p>
+<p>Mỗi biểu đồ là figure matplotlib riêng, không đặt màu thủ công. Có thể mở offline.</p>
+
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Doanh thu (Gross) theo tháng</h3>
+      <img src="misa_visuals/chart_01_sales_by_month.png" alt="Doanh thu (Gross) theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Tổng doanh thu đã gồm VAT theo tháng.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Số hóa đơn bán theo tháng</h3>
+      <img src="misa_visuals/chart_02_invoice_count.png" alt="Số hóa đơn bán theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Khối lượng giao dịch bán ra.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Giá trị HĐ bán trung bình</h3>
+      <img src="misa_visuals/chart_03_avg_invoice.png" alt="Giá trị HĐ bán trung bình" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Gross / số hóa đơn theo tháng.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Top khách hàng theo doanh thu</h3>
+      <img src="misa_visuals/chart_04_top_customers.png" alt="Top khách hàng theo doanh thu" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">10 khách hàng có doanh thu cao nhất.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Top mặt hàng theo doanh thu</h3>
+      <img src="misa_visuals/chart_05_top_items.png" alt="Top mặt hàng theo doanh thu" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">10 mặt hàng có doanh thu (net) cao nhất.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Mua hàng theo tháng</h3>
+      <img src="misa_visuals/chart_06_purchases_by_month.png" alt="Mua hàng theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Tổng giá trị mua vào đã gồm VAT theo tháng.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Bán vs Mua theo tháng</h3>
+      <img src="misa_visuals/chart_07_sales_vs_purchases.png" alt="Bán vs Mua theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">So sánh tổng giá trị mua/bán theo tháng.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">VAT theo tháng</h3>
+      <img src="misa_visuals/chart_08_vat_by_month.png" alt="VAT theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Đầu ra, đầu vào, chênh lệch phải nộp.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Histogram số ngày HĐ bán</h3>
+      <img src="misa_visuals/chart_09_invoice_age_hist.png" alt="Histogram số ngày HĐ bán" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Xấp xỉ phân bổ tuổi nợ (không trừ thu tiền).</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Histogram số ngày HĐ mua</h3>
+      <img src="misa_visuals/chart_10_bill_age_hist.png" alt="Histogram số ngày HĐ mua" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Xấp xỉ phân bổ tuổi nợ phải trả.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Phát sinh Nợ/Có theo tháng</h3>
+      <img src="misa_visuals/chart_11_gl_debit_credit.png" alt="Phát sinh Nợ/Có theo tháng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Tổng bút toán Nợ và Có theo tháng.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Top tài khoản theo phát sinh</h3>
+      <img src="misa_visuals/chart_12_gl_by_account.png" alt="Top tài khoản theo phát sinh" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">20 tài khoản có tổng phát sinh lớn nhất.</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">TB: Top account theo số dư ròng</h3>
+      <img src="misa_visuals/chart_13_trial_balance_net.png" alt="TB: Top account theo số dư ròng" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Chênh lệch tổng phát sinh Nợ-Có (toàn kỳ).</p>
+    </div>
+    
+    <div style="border:1px solid #ddd;padding:12px;margin:12px;border-radius:8px">
+      <h3 style="margin:4px 0">Top NCC theo mua vào</h3>
+      <img src="misa_visuals/chart_14_top_vendors.png" alt="Top NCC theo mua vào" style="max-width:100%"/>
+      <p style="margin:6px 0 0 0; font-size: 0.95em; color:#333">Tập trung chi tiêu theo NCC.</p>
+    </div>
+    
+</body></html>

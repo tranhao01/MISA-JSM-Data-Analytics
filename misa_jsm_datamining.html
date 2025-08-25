@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MISA JSM – In‑browser Data Analysis</title>
+  <!-- Chart.js & SheetJS (XLSX) via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { --bg:#0b1020; --card:#121830; --muted:#a7b0c3; --text:#eaf0ff; --accent:#6ea8fe; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Cantarell, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); }
+    header { padding: 20px 18px 10px; border-bottom: 1px solid #202949; position: sticky; top:0; background: linear-gradient(180deg, #0b1020 0%, rgba(11,16,32,.9) 100%); z-index: 2; }
+    h1 { margin:0; font-size: 20px; letter-spacing: .3px; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .wrap { max-width: 1220px; margin: 0 auto; padding: 18px; }
+    .uploader { border: 1px dashed #2a355f; background: #0e1430; padding: 18px; border-radius: 14px; display: grid; gap: 8px; align-items: center; }
+    .uploader:hover { border-color: var(--accent); }
+    .uploader input { display: none; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #1a2347; color: #eaf0ff; border: 1px solid #293566; cursor: pointer; font-weight: 600; }
+    .btn:active { transform: translateY(1px); }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+    .card { grid-column: span 12; background: var(--card); border: 1px solid #1e2548; border-radius: 16px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .card h3 { margin: 0 0 6px; font-size: 15px; }
+    .card p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+    .span6 { grid-column: span 6; }
+    .span4 { grid-column: span 4; }
+    .span3 { grid-column: span 3; }
+    canvas { width: 100% !important; height: 360px !important; }
+    .kpi { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .kpi th, .kpi td { border-bottom: 1px dashed #2b3560; padding: 8px 10px; text-align: right; }
+    .kpi th:first-child, .kpi td:first-child { text-align: left; }
+    .badge { display:inline-block; padding:2px 8px; border: 1px solid #2b3560; border-radius: 9999px; color: var(--muted); font-size:11px; }
+    .pill { padding:8px 10px; background:#101737; border:1px solid #293466; border-radius:12px; font-size:12px; display:inline-flex; gap:8px; align-items:center; }
+    .muted { color: var(--muted); }
+    .ok { color:#8dd17e; }
+    .warn { color:#ffb562; }
+    .err { color:#ff7a7a; }
+    @media (max-width: 980px){ .span6{grid-column:span 12} .span4{grid-column:span 12} .span3{grid-column:span 6} canvas{height:300px !important} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MISA JSM – Data Analysis (HTML Template)</h1>
+    <div class="sub">Tải file Excel dữ liệu giả lập/hoặc thực tế (định dạng các sheet như <code>SALES_HEADERS/LINES</code>, <code>PURCHASE_HEADERS/LINES</code>, <code>JOURNAL</code>, <code>TRIAL_BALANCE</code>…) để xem dashboard ngay trong trình duyệt. Không cần server hay cài đặt.</div>
+  </header>
+
+  <div class="wrap">
+    <div class="uploader grid">
+      <div style="grid-column: span 9">
+        <div class="pill">
+          <span>•</span>
+          <span><b>Hỗ trợ:</b> <code>misa_simulated_dataset_quick.xlsx</code> hoặc bản đầy đủ. Trường ngày dạng <code>YYYY-MM-DD</code>.</span>
+        </div>
+        <div style="margin-top:8px" class="muted">Bắt buộc sheet tối thiểu: <code>SALES_HEADERS</code> (để vẽ doanh thu). Khuyến nghị có thêm: <code>PURCHASE_HEADERS</code>, <code>SALES_LINES</code>, <code>PURCHASE_LINES</code>, <code>JOURNAL</code>, <code>TRIAL_BALANCE</code>.</div>
+      </div>
+      <div style="grid-column: span 3; text-align:right">
+        <label class="btn">
+          📁 Chọn Excel
+          <input id="file" type="file" accept=".xlsx,.xls" />
+        </label>
+      </div>
+      <div style="grid-column: span 12" id="meta"></div>
+    </div>
+
+    <div class="grid" id="dash" style="margin-top:14px; display:none">
+      <div class="card span12">
+        <h3>📊 KPI theo tháng</h3>
+        <p>Tổng hợp từ Sales/Purchases/VAT. Nếu thiếu sheet, chỉ số sẽ tự ẩn/coi như 0.</p>
+        <div id="kpiTableWrap"></div>
+      </div>
+
+      <div class="card span6">
+        <h3>Doanh thu (Gross) theo tháng</h3>
+        <canvas id="salesGross"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>Số lượng hóa đơn bán theo tháng</h3>
+        <canvas id="invoiceCount"></canvas>
+      </div>
+
+      <div class="card span6">
+        <h3>Giá trị hóa đơn bán trung bình</h3>
+        <canvas id="avgInvoice"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>Giá trị mua hàng (Gross) theo tháng</h3>
+        <canvas id="purchGross"></canvas>
+      </div>
+
+      <div class="card span6">
+        <h3>So sánh Bán vs Mua theo tháng (Gross)</h3>
+        <canvas id="salesVsPurch"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>VAT: đầu ra / đầu vào / phải nộp</h3>
+        <canvas id="vatLines"></canvas>
+      </div>
+
+      <div class="card span6">
+        <h3>Top 10 khách hàng theo doanh thu</h3>
+        <canvas id="topCustomers"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>Top 10 mặt hàng theo doanh thu (Net)</h3>
+        <canvas id="topItems"></canvas>
+      </div>
+
+      <div class="card span6">
+        <h3>Tổng phát sinh Nợ/Có theo tháng (GL)</h3>
+        <canvas id="glMonthly"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>Trial Balance: Top 20 tài khoản theo số dư ròng</h3>
+        <canvas id="tbTopNet"></canvas>
+      </div>
+
+      <div class="card span6">
+        <h3>Top 10 nhà cung cấp theo giá trị mua</h3>
+        <canvas id="topVendors"></canvas>
+      </div>
+      <div class="card span6">
+        <h3>Histogram ~ số ngày kể từ HĐ bán</h3>
+        <canvas id="histSalesDays"></canvas>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (sel) => document.querySelector(sel);
+  const fmt = new Intl.NumberFormat('vi-VN');
+  const by = (arr, key) => arr.reduce((m,o)=>{const k=o[key]; (m[k]=m[k]||[]).push(o); return m;},{});
+  const toMonth = (d) => {
+    const dt = new Date(d);
+    if (isNaN(+dt)) return null;
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+  }
+  const sum = (arr, key) => arr.reduce((t,o)=> t + (+o[key]||0), 0);
+
+  function sheetToJSON(workbook, name){
+    const ws = workbook.Sheets[name];
+    if (!ws) return [];
+    return XLSX.utils.sheet_to_json(ws, {defval: null});
+  }
+
+  function monthsSorted(keys){ return keys.sort(); }
+
+  function tableKPI(rows){
+    const tbl = document.createElement('table');
+    tbl.className = 'kpi';
+    tbl.innerHTML = `<thead><tr><th>Tháng</th><th>Bán (gross)</th><th>Mua (gross)</th><th>VAT phải nộp</th></tr></thead>`;
+    const tb = document.createElement('tbody');
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.month}</td><td>${fmt.format(r.sales_gross||0)}</td><td>${fmt.format(r.purch_gross||0)}</td><td>${fmt.format(r.vat_payable||0)}</td>`;
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    return tbl;
+  }
+
+  function makeChart(ctx, type, labels, datasets){
+    return new Chart(ctx, { type, data: { labels, datasets }, options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display: datasets.length>1 } } } });
+  }
+
+  function buildCharts(wb){
+    const SH = sheetToJSON(wb, 'SALES_HEADERS');
+    const SL = sheetToJSON(wb, 'SALES_LINES');
+    const PH = sheetToJSON(wb, 'PURCHASE_HEADERS');
+    const PL = sheetToJSON(wb, 'PURCHASE_LINES');
+    const J  = sheetToJSON(wb, 'JOURNAL');
+    const TB = sheetToJSON(wb, 'TRIAL_BALANCE');
+
+    $('#dash').style.display = 'grid';
+
+    // ---- SALES by month ----
+    let salesMonth = {};
+    SH.forEach(r=>{
+      const m = toMonth(r.invoice_date); if(!m) return;
+      salesMonth[m] = salesMonth[m] || { net:0, vat:0, gross:0, count:0 };
+      salesMonth[m].net   += +r.net_amount||0;
+      salesMonth[m].vat   += +r.vat_amount||0;
+      salesMonth[m].gross += +r.gross_amount||0;
+      salesMonth[m].count += 1;
+    });
+
+    const months = monthsSorted(Object.keys(salesMonth));
+    const salesGross = months.map(m=> salesMonth[m].gross);
+    const salesCount = months.map(m=> salesMonth[m].count);
+    const salesAvg   = months.map((m,i)=> salesCount[i]? salesGross[i]/salesCount[i] : 0);
+
+    if(months.length){
+      makeChart($('#salesGross'), 'line', months, [{label:'Gross', data: salesGross}]);
+      makeChart($('#invoiceCount'), 'bar', months, [{label:'HĐ bán', data: salesCount}]);
+      makeChart($('#avgInvoice'), 'line', months, [{label:'Trung bình', data: salesAvg}]);
+    }
+
+    // ---- PURCHASES by month ----
+    let purchMonth = {};
+    PH.forEach(r=>{
+      const m = toMonth(r.bill_date); if(!m) return;
+      purchMonth[m] = purchMonth[m] || { gross:0 };
+      purchMonth[m].gross += +r.gross_amount||0;
+    });
+    const pMonths = monthsSorted(Object.keys(purchMonth));
+    const purchGross = pMonths.map(m=> purchMonth[m].gross);
+    if(pMonths.length){ makeChart($('#purchGross'),'bar', pMonths,[{label:'Mua (gross)', data: purchGross}]); }
+
+    // ---- SALES vs PURCHASES ----
+    const allMonths = monthsSorted([...new Set([...months, ...pMonths])]);
+    const alignedSales = allMonths.map(m=> salesMonth[m]?.gross || 0);
+    const alignedPurch = allMonths.map(m=> purchMonth[m]?.gross || 0);
+    if(allMonths.length){
+      makeChart($('#salesVsPurch'), 'bar', allMonths, [
+        {label:'Bán', data: alignedSales},
+        {label:'Mua', data: alignedPurch},
+      ]);
+    }
+
+    // ---- VAT by month (requires lines + header dates) ----
+    let vatMonth = {};
+    if (SL.length && PL.length && SH.length && PH.length){
+      const invDateMap = {}; SH.forEach(r=> invDateMap[r.invoice_no] = r.invoice_date);
+      const billDateMap = {}; PH.forEach(r=> billDateMap[r.bill_no] = r.bill_date);
+      SL.forEach(r=>{ const m = toMonth(invDateMap[r.invoice_no]); if(!m) return; vatMonth[m] = vatMonth[m]||{out:0,in:0}; vatMonth[m].out += +r.line_vat||0; });
+      PL.forEach(r=>{ const m = toMonth(billDateMap[r.bill_no]); if(!m) return; vatMonth[m] = vatMonth[m]||{out:0,in:0}; vatMonth[m].in  += +r.line_vat||0; });
+      const vMonths = monthsSorted(Object.keys(vatMonth));
+      const vatOut = vMonths.map(m=> vatMonth[m].out);
+      const vatIn  = vMonths.map(m=> vatMonth[m].in);
+      const vatPay = vMonths.map((m,i)=> vatOut[i] - vatIn[i]);
+      if (vMonths.length){ makeChart($('#vatLines'),'line', vMonths,[{label:'Đầu ra', data: vatOut},{label:'Đầu vào', data: vatIn},{label:'Phải nộp', data: vatPay}]); }
+    }
+
+    // ---- TOP CUSTOMERS ----
+    const custAgg = by(SH, 'customer_name');
+    const custRows = Object.entries(custAgg).map(([k,v])=>({ name:k, gross: sum(v,'gross_amount') }))
+      .sort((a,b)=>b.gross-a.gross).slice(0,10);
+    if(custRows.length){
+      makeChart($('#topCustomers'),'bar', custRows.map(r=>r.name), [{label:'Doanh thu', data: custRows.map(r=>r.gross)}]);
+    }
+
+    // ---- TOP ITEMS (by SALES_LINES) ----
+    if(SL.length){
+      let nameMap = {}; const ITEMS = sheetToJSON(wb, 'ITEMS');
+      ITEMS.forEach(it => nameMap[it.item_code] = it.item_name || it.item_code);
+      const byItem = by(SL, 'item_code');
+      const itemRows = Object.entries(byItem).map(([code, arr])=>({ name: nameMap[code]||code, net: sum(arr,'line_net') }))
+        .sort((a,b)=>b.net-a.net).slice(0,10);
+      if(itemRows.length){ makeChart($('#topItems'),'bar', itemRows.map(r=>r.name), [{label:'Net', data:itemRows.map(r=>r.net)}]); }
+    }
+
+    // ---- GL Nợ/Có by month ----
+    if(J.length){
+      const j = J.filter(r=> r.entry_date);
+      const agg = {};
+      j.forEach(r=>{
+        const m = toMonth(r.entry_date); if(!m) return;
+        agg[m] = agg[m]||{no:0, co:0};
+        if((r.drcr||'').toLowerCase().includes('nợ')) agg[m].no += +r.amount||0; else agg[m].co += +r.amount||0;
+      });
+      const jm = monthsSorted(Object.keys(agg));
+      if(jm.length){ makeChart($('#glMonthly'),'line', jm, [{label:'Tổng Nợ', data: jm.map(m=>agg[m].no)}, {label:'Tổng Có', data: jm.map(m=>agg[m].co)}]); }
+    }
+
+    // ---- Trial Balance top net (debit - credit) ----
+    if(TB.length){
+      const accAgg = by(TB, 'account_code');
+      const rows = Object.entries(accAgg).map(([acc, arr])=>({ acc, net: sum(arr,'debit') - sum(arr,'credit') }))
+                    .sort((a,b)=> Math.abs(b.net) - Math.abs(a.net)).slice(0,20);
+      if(rows.length){ makeChart($('#tbTopNet'),'bar', rows.map(r=>r.acc), [{label:'Net (Nợ-Có)', data: rows.map(r=>r.net)}]); }
+    }
+
+    // ---- Top Vendors ----
+    const vendAgg = by(PH, 'vendor_name');
+    const vendRows = Object.entries(vendAgg).map(([k,v])=>({ name:k, gross: sum(v,'gross_amount') }))
+      .sort((a,b)=>b.gross-a.gross).slice(0,10);
+    if(vendRows.length){ makeChart($('#topVendors'), 'bar', vendRows.map(r=>r.name), [{label:'Mua vào', data: vendRows.map(r=>r.gross)}]); }
+
+    // ---- Histogram of days since sales invoice ----
+    if(SH.length){
+      const today = new Date();
+      const days = SH.map(r=>{ const d=new Date(r.invoice_date); return isNaN(+d)? null : Math.floor((today - d)/86400000); }).filter(v=> v!==null);
+      if(days.length){
+        const bin = (size)=>{
+          const max = Math.max(...days); const bins = Math.ceil((max+1)/size); const labels=[]; const counts=new Array(bins).fill(0);
+          for(let i=0;i<bins;i++){ labels.push(`${i*size}-${(i+1)*size-1}`); }
+          days.forEach(v=>{ const idx = Math.min(Math.floor(v/size), bins-1); counts[idx]++; });
+          return {labels, counts};
+        }
+        const {labels, counts} = bin(30);
+        makeChart($('#histSalesDays'), 'bar', labels, [{label:'Số HĐ', data: counts}]);
+      }
+    }
+
+    // ---- KPI table ----
+    const all = [...new Set([...allMonths, ...Object.keys(vatMonth||{})])].sort();
+    const kpi = all.map(m=>({
+      month: m,
+      sales_gross: salesMonth[m]?.gross || 0,
+      purch_gross: purchMonth[m]?.gross || 0,
+      vat_payable: vatMonth[m]? (vatMonth[m].out - vatMonth[m].in) : 0,
+    }));
+    const host = document.getElementById('kpiTableWrap');
+    host.innerHTML = '';
+    host.appendChild(tableKPI(kpi));
+  }
+
+  function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetList = wb.SheetNames.join(', ');
+      $('#meta').innerHTML = `<span class="badge">Đã nạp: ${file.name}</span> <span class="badge">Sheets: ${sheetList}</span>`;
+      buildCharts(wb);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  document.getElementById('file').addEventListener('change', (ev)=>{
+    const f = ev.target.files?.[0]; if(!f) return; handleFile(f);
+  });
+</script>
+</body>
+</html>
