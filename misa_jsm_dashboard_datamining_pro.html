@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MISA JSM – In‑browser Analytics (Pro, Fixed)</title>
+  <!-- CDNs: Chart.js, SheetJS (XLSX), jsPDF for export -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <style>
+    :root { --bg:#0b1020; --card:#121830; --muted:#a7b0c3; --text:#eaf0ff; --accent:#67a5ff; --border:#232c52; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: var(--bg); color: var(--text); }
+    header { padding: 18px; border-bottom: 1px solid var(--border); position: sticky; top:0; background: linear-gradient(180deg, rgba(11,16,32,1) 0%, rgba(11,16,32,.92) 100%); z-index: 3; }
+    h1 { margin:0; font-size: 20px; letter-spacing:.2px; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
+    .bar { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
+    .pill { padding:8px 12px; border:1px solid var(--border); border-radius: 12px; background: #0e1633; font-size:12px; color: var(--muted); }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px; background:#1a2247; border:1px solid #293566; color:#eaf0ff; cursor:pointer; font-weight:600; }
+    .btn:active { transform: translateY(1px); }
+    .muted { color: var(--muted); }
+    .grid { display:grid; gap:14px; grid-template-columns: repeat(12, 1fr); }
+    .card { grid-column: span 12; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 12px; box-shadow:0 8px 28px rgba(0,0,0,.25); }
+    .card h3 { margin: 0 0 4px; font-size: 15px; }
+    .card p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+    .row { display:flex; gap:8px; align-items:center; justify-content: space-between; }
+    .left { display:flex; gap:8px; align-items:center; }
+    .span6 { grid-column: span 6; }
+    .span4 { grid-column: span 4; }
+    .span8 { grid-column: span 8; }
+    canvas { width: 100% !important; height: 360px !important; }
+    .export { display:flex; gap:6px; align-items:center; }
+    .hint { font-size: 11px; color: var(--muted); }
+    .kpi { width:100%; border-collapse: collapse; font-size: 12px; }
+    .kpi th, .kpi td { border-bottom: 1px dashed var(--border); padding: 8px 10px; text-align: right; }
+    .kpi th:first-child, .kpi td:first-child { text-align: left; }
+    .badge { display:inline-block; padding:2px 8px; border: 1px solid var(--border); border-radius: 9999px; color: var(--muted); font-size:11px; }
+    .err { color:#ff7a7a; }
+    .warn { color:#ffb562; }
+    .ok { color:#87d993; }
+    .toolbar { margin-top: 8px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input[type="month"], select { background:#0e1633; border:1px solid var(--border); color:#eaf0ff; padding:8px 10px; border-radius:10px; }
+    @media (max-width: 980px){ .span6{grid-column:span 12} .span4{grid-column:span 12} .span8{grid-column:span 12} canvas{height:300px !important} }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MISA JSM – Data Analysis (Pro Template)</h1>
+    <div class="sub">Upload Excel (mẫu <code>misa_simulated_dataset_quick.xlsx</code> hoặc bản đầy đủ). Template nâng cấp: bộ lọc thời gian, Top‑N, biểu đồ mới (Gross Margin, Cash In/Out, Aging AR/AP chuẩn nếu có dữ liệu), xuất PNG/PDF từng chart hoặc toàn bộ.</div>
+    <div class="toolbar">
+      <label class="btn">📁 Chọn Excel <input id="file" type="file" accept=".xlsx,.xls" style="display:none"></label>
+      <span class="pill">Từ: <input id="fromMonth" type="month"></span>
+      <span class="pill">Đến: <input id="toMonth" type="month"></span>
+      <span class="pill">Top‑N: <select id="topN"><option>5</option><option selected>10</option><option>15</option><option>20</option></select></span>
+      <button class="btn" id="exportAllPdf">📄 Export toàn bộ PDF</button>
+      <button class="btn" id="runTests">🧪 Run self‑tests</button>
+      <span id="meta" class="muted"></span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="missing" class="muted"></div>
+
+    <div class="grid" id="dash" style="display:none; margin-top:12px;">
+      <div class="card span12">
+        <div class="row"><div class="left"><h3>📊 KPI theo tháng</h3><span class="badge" id="asOf"></span></div></div>
+        <div id="kpiTableWrap"></div>
+      </div>
+
+      <div class="card span6">
+        <div class="row"><h3>Doanh thu (Gross) theo tháng</h3><div class="export" data-canvas="salesGross"></div></div>
+        <canvas id="salesGross"></canvas>
+      </div>
+      <div class="card span6">
+        <div class="row"><h3>Số lượng hóa đơn bán theo tháng</h3><div class="export" data-canvas="invoiceCount"></div></div>
+        <canvas id="invoiceCount"></canvas>
+      </div>
+
+      <div class="card span6">
+        <div class="row"><h3>Giá trị hóa đơn bán trung bình</h3><div class="export" data-canvas="avgInvoice"></div></div>
+        <canvas id="avgInvoice"></canvas>
+      </div>
+      <div class="card span6">
+        <div class="row"><h3>Giá trị mua hàng (Gross) theo tháng</h3><div class="export" data-canvas="purchGross"></div></div>
+        <canvas id="purchGross"></canvas>
+      </div>
+
+      <div class="card span6">
+        <div class="row"><h3>So sánh Bán vs Mua theo tháng (Gross)</h3><div class="export" data-canvas="salesVsPurch"></div></div>
+        <canvas id="salesVsPurch"></canvas>
+      </div>
+      <div class="card span6">
+        <div class="row"><h3>VAT: đầu ra / đầu vào / phải nộp</h3><div class="export" data-canvas="vatLines"></div></div>
+        <canvas id="vatLines"></canvas>
+      </div>
+
+      <div class="card span6" id="card-topCustomers">
+        <div class="row"><h3>Top khách hàng theo doanh thu</h3><div class="export" data-canvas="topCustomers"></div></div>
+        <canvas id="topCustomers"></canvas>
+      </div>
+      <div class="card span6" id="card-topItems">
+        <div class="row"><h3>Top mặt hàng theo doanh thu (Net)</h3><div class="export" data-canvas="topItems"></div></div>
+        <canvas id="topItems"></canvas>
+      </div>
+
+      <div class="card span6">
+        <div class="row"><h3>Tổng phát sinh Nợ/Có theo tháng (GL)</h3><div class="export" data-canvas="glMonthly"></div></div>
+        <canvas id="glMonthly"></canvas>
+      </div>
+      <div class="card span6">
+        <div class="row"><h3>Trial Balance: Top tài khoản theo số dư ròng</h3><div class="export" data-canvas="tbTopNet"></div></div>
+        <canvas id="tbTopNet"></canvas>
+      </div>
+
+      <!-- NEW: Gross Margin (requires JOURNAL 511/632 or SALES_LINES.estimated_cogs) -->
+      <div class="card span6" id="card-grossMargin">
+        <div class="row"><h3>Gross Margin theo tháng</h3><div class="export" data-canvas="grossMargin"></div></div>
+        <p class="hint">Tự động lấy <code>511 (Cr)</code> & <code>632 (Dr)</code> từ JOURNAL, hoặc <code>estimated_cogs</code> trong SALES_LINES nếu có.</p>
+        <canvas id="grossMargin"></canvas>
+      </div>
+
+      <!-- NEW: Cash In/Out (requires BANK_TX) -->
+      <div class="card span6" id="card-cashFlow">
+        <div class="row"><h3>Cash In / Out theo tháng</h3><div class="export" data-canvas="cashFlow"></div></div>
+        <p class="hint">Cần sheet <code>BANK_TX</code> với cột <code>txn_date, direction (IN/OUT), amount</code>.</p>
+        <canvas id="cashFlow"></canvas>
+      </div>
+
+      <!-- NEW: AR/AP Aging (proper if have RECEIPTS/PAYMENTS) -->
+      <div class="card span6" id="card-arAging">
+        <div class="row"><h3>Aging Phải thu (AR)</h3><div class="export" data-canvas="arAging"></div></div>
+        <p class="hint">Chuẩn nếu có <code>RECEIPTS.ref_invoice</code>; nếu thiếu dữ liệu sẽ ẩn.</p>
+        <canvas id="arAging"></canvas>
+      </div>
+      <div class="card span6" id="card-apAging">
+        <div class="row"><h3>Aging Phải trả (AP)</h3><div class="export" data-canvas="apAging"></div></div>
+        <p class="hint">Chuẩn nếu có <code>PAYMENTS.ref_bill_or_doc</code> (dạng PN*).</p>
+        <canvas id="apAging"></canvas>
+      </div>
+
+      <div class="card span12">
+        <div class="row"><h3>Ghi chú dữ liệu</h3></div>
+        <div id="notes" class="muted"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (sel) => document.querySelector(sel);
+  const fmt = new Intl.NumberFormat('vi-VN');
+  const by = (arr, key) => arr.reduce((m,o)=>{const k=o[key]; (m[k]=m[k]||[]).push(o); return m;},{});
+  const toMonth = (d) => { const dt = new Date(d); if (isNaN(+dt)) return null; return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; };
+  const sum = (arr, key) => arr.reduce((t,o)=> t + (+o[key]||0), 0);
+  const monthsSorted = (keys) => keys.sort();
+  const chartStore = {}; // id -> Chart instance
+
+  function sheetToJSON(workbook, name){ const ws = workbook.Sheets[name]; if(!ws) return []; return XLSX.utils.sheet_to_json(ws, {defval:null}); }
+
+  function makeChart(id, type, labels, datasets, opts={}){
+    const el = document.getElementById(id); if(!el) return;
+    if(chartStore[id]){ chartStore[id].destroy(); }
+    chartStore[id] = new Chart(el, { type, data:{ labels, datasets }, options: Object.assign({ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display: datasets.length>1 } } }, opts) });
+  }
+
+  function attachExports(){
+    document.querySelectorAll('.export').forEach(div=>{
+      const id = div.getAttribute('data-canvas');
+      div.innerHTML = '';
+      const btnPng = document.createElement('button'); btnPng.className='btn'; btnPng.textContent='PNG'; btnPng.onclick=()=> exportPNG(id);
+      const btnPdf = document.createElement('button'); btnPdf.className='btn'; btnPdf.textContent='PDF'; btnPdf.onclick=()=> exportPDF(id);
+      div.appendChild(btnPng); div.appendChild(btnPdf);
+    });
+  }
+
+  async function exportPNG(id){
+    const canvas = document.getElementById(id);
+    if(!canvas) return alert('Không tìm thấy canvas '+id);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `${id}.png`;
+    a.click();
+  }
+
+  async function exportPDF(id){
+    const { jsPDF } = window.jspdf;
+    const canvas = document.getElementById(id); if(!canvas) return;
+    const img = canvas.toDataURL('image/png');
+    const landscape = canvas.width > canvas.height;
+    const doc = new jsPDF({ orientation: landscape ? 'l' : 'p', unit: 'pt', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const imgW = pageW - 40, imgH = imgW * (canvas.height/canvas.width);
+    const y = (pageH - imgH)/2;
+    doc.setFontSize(14); doc.text(id, 20, 24);
+    doc.addImage(img, 'PNG', 20, Math.max(40, y), imgW, imgH);
+    doc.save(`${id}.pdf`);
+  }
+
+  async function exportAllPDF(){
+    const { jsPDF } = window.jspdf;
+    const ids = Object.keys(chartStore);
+    if(!ids.length) return alert('Chưa có chart để xuất.');
+    const doc = new jsPDF({ orientation:'l', unit:'pt', format:'a4' });
+    ids.forEach((id, idx)=>{
+      const canvas = document.getElementById(id); if(!canvas) return;
+      const img = canvas.toDataURL('image/png');
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const imgW = pageW - 40, imgH = imgW * (canvas.height/canvas.width);
+      const y = (pageH - imgH)/2;
+      if(idx>0) doc.addPage();
+      doc.setFontSize(14); doc.text(id, 20, 24);
+      doc.addImage(img, 'PNG', 20, Math.max(40, y), imgW, imgH);
+    });
+    doc.save('MISA_dashboard.pdf');
+  }
+
+  function showCardByCanvasId(id, show){
+    const el = document.getElementById(id); if(!el) return; const card = el.closest('.card'); if(!card) return;
+    card.classList.toggle('hidden', !show);
+  }
+
+  // --- Derivations ---
+  function buildAll(wb){
+    const SH = sheetToJSON(wb, 'SALES_HEADERS');
+    const SL = sheetToJSON(wb, 'SALES_LINES');
+    const PH = sheetToJSON(wb, 'PURCHASE_HEADERS');
+    const PL = sheetToJSON(wb, 'PURCHASE_LINES');
+    const J  = sheetToJSON(wb, 'JOURNAL');
+    const TB = sheetToJSON(wb, 'TRIAL_BALANCE');
+    const BT = sheetToJSON(wb, 'BANK_TX');
+    const RC = sheetToJSON(wb, 'RECEIPTS');
+    const PM = sheetToJSON(wb, 'PAYMENTS');
+
+    const notes = [];
+    const miss = [];
+    if(!SH.length) miss.push('SALES_HEADERS');
+    if(!PH.length) notes.push('Không có PURCHASE_HEADERS: một số biểu đồ mua hàng sẽ ẩn.');
+    if(!SL.length) notes.push('Không có SALES_LINES: Top mặt hàng/ VAT theo dòng có thể hạn chế.');
+    if(!PL.length) notes.push('Không có PURCHASE_LINES: VAT input có thể hạn chế.');
+    if(!BT.length) notes.push('Không có BANK_TX: Cash In/Out sẽ ẩn.');
+    if(!RC.length) notes.push('Không có RECEIPTS: AR Aging chuẩn sẽ ẩn.');
+    if(!PM.length) notes.push('Không có PAYMENTS: AP Aging chuẩn sẽ ẩn.');
+
+    $('#missing').innerHTML = miss.length? `<span class="err">Thiếu sheet bắt buộc: ${miss.join(', ')}</span>` : '';
+    $('#notes').innerHTML = notes.map(s=>`• ${s}`).join('<br>');
+
+    if(!SH.length){ $('#dash').style.display='none'; return; }
+    $('#dash').style.display='grid';
+
+    // Month range defaults
+    const monthsFromData = [...new Set(SH.map(r=> toMonth(r.invoice_date)).filter(Boolean))].sort();
+    const firstM = monthsFromData[0] || '';
+    const lastM  = monthsFromData[monthsFromData.length-1] || '';
+    const fromEl = $('#fromMonth'); const toEl = $('#toMonth');
+    if(!fromEl.value) fromEl.value = firstM;
+    if(!toEl.value) toEl.value = lastM;
+
+    const inRange = (m) => {
+      const from = fromEl.value || firstM; const to = toEl.value || lastM;
+      if(!m) return false; // guard
+      return (!from || m>=from) && (!to || m<=to);
+    };
+
+    const topN = () => parseInt($('#topN').value||'10',10);
+
+    // --- Sales Month ---
+    const salesMonth = {};
+    SH.forEach(r=>{ const m=toMonth(r.invoice_date); if(!m || !inRange(m)) return; (salesMonth[m] ||= {net:0,vat:0,gross:0,count:0}); salesMonth[m].net += +r.net_amount||0; salesMonth[m].vat += +r.vat_amount||0; salesMonth[m].gross += +r.gross_amount||0; salesMonth[m].count++; });
+    const months = monthsSorted(Object.keys(salesMonth));
+    makeChart('salesGross','line', months, [{label:'Gross', data: months.map(m=> salesMonth[m].gross)}]);
+    makeChart('invoiceCount','bar', months, [{label:'HĐ bán', data: months.map(m=> salesMonth[m].count)}]);
+    const avg = months.map(m=> salesMonth[m].count ? salesMonth[m].gross/salesMonth[m].count : 0);
+    makeChart('avgInvoice','line', months, [{label:'Trung bình', data: avg}]);
+
+    // --- Purchases ---
+    const purchMonth = {};
+    PH.forEach(r=>{ const m=toMonth(r.bill_date); if(!m || !inRange(m)) return; (purchMonth[m] ||= {gross:0}); purchMonth[m].gross += +r.gross_amount||0; });
+    const pMonths = monthsSorted(Object.keys(purchMonth));
+    showCardByCanvasId('purchGross', !!pMonths.length);
+    if(pMonths.length) makeChart('purchGross','bar', pMonths, [{label:'Mua (gross)', data: pMonths.map(m=>purchMonth[m].gross)}]);
+
+    // --- Sales vs Purchases ---
+    const allMonths = monthsSorted([...new Set([...months, ...pMonths])]);
+    showCardByCanvasId('salesVsPurch', !!allMonths.length);
+    if(allMonths.length){
+      makeChart('salesVsPurch','bar', allMonths, [
+        {label:'Bán', data: allMonths.map(m=> salesMonth[m]?.gross||0)},
+        {label:'Mua', data: allMonths.map(m=> purchMonth[m]?.gross||0)}
+      ]);
+    }
+
+    // --- VAT ---
+    const vatMonth = {};
+    if (SL.length && PL.length && SH.length && PH.length){
+      const invDate = {}; SH.forEach(r=> invDate[r.invoice_no] = r.invoice_date);
+      const billDate = {}; PH.forEach(r=> billDate[r.bill_no]    = r.bill_date);
+      SL.forEach(r=>{ const m=toMonth(invDate[r.invoice_no]); if(!m || !inRange(m)) return; (vatMonth[m] ||= {out:0,in:0}); vatMonth[m].out += +r.line_vat||0; });
+      PL.forEach(r=>{ const m=toMonth(billDate[r.bill_no]);    if(!m || !inRange(m)) return; (vatMonth[m] ||= {out:0,in:0}); vatMonth[m].in  += +r.line_vat||0; });
+      const vMonths = monthsSorted(Object.keys(vatMonth));
+      showCardByCanvasId('vatLines', !!vMonths.length);
+      if(vMonths.length) makeChart('vatLines','line', vMonths, [ {label:'Đầu ra', data: vMonths.map(m=> vatMonth[m].out)}, {label:'Đầu vào', data: vMonths.map(m=> vatMonth[m].in)}, {label:'Phải nộp', data: vMonths.map(m=> vatMonth[m].out - vatMonth[m].in)} ]);
+    } else {
+      showCardByCanvasId('vatLines', false);
+    }
+
+    // --- Top Customers ---
+    const custAgg = by(SH.filter(r=> inRange(toMonth(r.invoice_date))), 'customer_name');
+    const custRows = Object.entries(custAgg).map(([name, arr])=>({ name, gross: sum(arr,'gross_amount') }))
+      .sort((a,b)=> b.gross - a.gross).slice(0, topN());
+    showCardByCanvasId('topCustomers', !!custRows.length);
+    if(custRows.length) makeChart('topCustomers','bar', custRows.map(r=>r.name), [{label:'Doanh thu', data: custRows.map(r=>r.gross)}]);
+
+    // --- Top Items ---
+    if(SL.length){
+      const invDate = {}; SH.forEach(r=> invDate[r.invoice_no] = r.invoice_date);
+      const filtered = SL.filter(r=> inRange(toMonth(invDate[r.invoice_no])));
+      const ITEMS = sheetToJSON(wb, 'ITEMS'); const nameMap={}; ITEMS.forEach(it=> nameMap[it.item_code]=it.item_name||it.item_code);
+      const byItem = by(filtered, 'item_code');
+      const rows = Object.entries(byItem).map(([code, arr])=>({ name: nameMap[code]||code, net: sum(arr,'line_net'), cogs: sum(arr,'estimated_cogs') }))
+        .sort((a,b)=> b.net - a.net).slice(0, topN());
+      showCardByCanvasId('topItems', !!rows.length);
+      if(rows.length) makeChart('topItems','bar', rows.map(r=>r.name), [{label:'Net', data: rows.map(r=>r.net)}]);
+    } else {
+      showCardByCanvasId('topItems', false);
+    }
+
+    // --- GL Nợ/Có ---
+    if(J.length){
+      const agg = {};
+      J.forEach(r=>{ const m=toMonth(r.entry_date); if(!m || !inRange(m)) return; (agg[m] ||= {no:0,co:0});
+        if((r.drcr||'').toLowerCase().includes('nợ')) agg[m].no += +r.amount||0; else agg[m].co += +r.amount||0;
+      });
+      const jm = monthsSorted(Object.keys(agg));
+      showCardByCanvasId('glMonthly', !!jm.length);
+      if(jm.length) makeChart('glMonthly','line', jm, [ {label:'Tổng Nợ', data: jm.map(m=>agg[m].no)}, {label:'Tổng Có', data: jm.map(m=>agg[m].co)} ]);
+    } else {
+      showCardByCanvasId('glMonthly', false);
+    }
+
+    // --- Trial Balance Top Net ---
+    if(TB.length){
+      const acc = by(TB, 'account_code');
+      const rows = Object.entries(acc).map(([acc, arr])=>({ acc, net: sum(arr,'debit') - sum(arr,'credit') }))
+        .sort((a,b)=> Math.abs(b.net) - Math.abs(a.net)).slice(0, topN());
+      showCardByCanvasId('tbTopNet', !!rows.length);
+      if(rows.length) makeChart('tbTopNet','bar', rows.map(r=>r.acc), [{label:'Net (Nợ-Có)', data: rows.map(r=>r.net)}]);
+    } else {
+      showCardByCanvasId('tbTopNet', false);
+    }
+
+    // --- Gross Margin ---
+    let gmMonths=[]; let rev=[], cogs=[]; let gmOK=false;
+    if(J.length){
+      const byMAcc = {};
+      J.forEach(r=>{ const m=toMonth(r.entry_date); if(!m || !inRange(m)) return; const acc=(r.account_code||'').toString(); (byMAcc[m] ||= {}); (byMAcc[m][acc] ||= {debit:0,credit:0});
+        if((r.drcr||'').toLowerCase().includes('nợ')) byMAcc[m][acc].debit += +r.amount||0; else byMAcc[m][acc].credit += +r.amount||0; });
+      gmMonths = monthsSorted(Object.keys(byMAcc));
+      rev = gmMonths.map(m=> (byMAcc[m]['511']?.credit)||0);
+      cogs = gmMonths.map(m=> (byMAcc[m]['632']?.debit)||0);
+      gmOK = rev.some(v=>v>0) && cogs.some(v=>v>0);
+    }
+    if(!gmOK && SL.length){ // fallback using estimated_cogs if exists
+      const invDate = {}; SH.forEach(r=> invDate[r.invoice_no] = r.invoice_date);
+      const rows = {};
+      SL.forEach(r=>{ const m=toMonth(invDate[r.invoice_no]); if(!m || !inRange(m)) return; (rows[m] ||= {net:0,cogs:0}); rows[m].net += +r.line_net||0; rows[m].cogs += +r.estimated_cogs||0; });
+      gmMonths = monthsSorted(Object.keys(rows)); rev = gmMonths.map(m=> rows[m].net); cogs = gmMonths.map(m=> rows[m].cogs);
+      gmOK = rev.some(v=>v>0) && cogs.some(v=>v>0);
+    }
+    showCardByCanvasId('grossMargin', gmOK);
+    if(gmOK){
+      const gmPct = rev.map((v,i)=> v? (v - cogs[i]) / v * 100 : 0);
+      makeChart('grossMargin','bar', gmMonths, [
+        {label:'Revenue (net)', data: rev}, {label:'COGS', data: cogs}, {label:'GM %', type:'line', data: gmPct, yAxisID:'y1'}
+      ], { scales:{ y:{ beginAtZero:true }, y1:{ position:'right', ticks:{ callback:(v)=> v+'%' } } } });
+    }
+
+    // --- Cash In/Out ---
+    if(BT.length){
+      const cf = {};
+      BT.forEach(r=>{ const m=toMonth(r.txn_date); if(!m || !inRange(m)) return; (cf[m] ||= {IN:0, OUT:0}); const dir=(r.direction||'').toUpperCase(); if(dir==='IN') cf[m].IN += +r.amount||0; if(dir==='OUT') cf[m].OUT += +r.amount||0; });
+      const ms = monthsSorted(Object.keys(cf));
+      const ok = !!ms.length;
+      showCardByCanvasId('cashFlow', ok);
+      if(ok){
+        const ins = ms.map(m=> cf[m].IN), outs = ms.map(m=> cf[m].OUT), net = ms.map((_,i)=> ins[i]-outs[i]);
+        makeChart('cashFlow','bar', ms, [ {label:'IN', data:ins}, {label:'OUT', data:outs}, {label:'NET', type:'line', data:net} ]);
+      }
+    } else {
+      showCardByCanvasId('cashFlow', false);
+    }
+
+    // --- AR Aging ---
+    if(RC.length){
+      const inv = {}; SH.forEach(r=>{ const m=toMonth(r.invoice_date); if(!m || !inRange(m)) return; inv[r.invoice_no] = { date: new Date(r.invoice_date), amount: +r.gross_amount||0 }; });
+      const paid = {}; RC.forEach(r=>{ if(!inv[r.ref_invoice]) return; paid[r.ref_invoice] = (paid[r.ref_invoice]||0) + (+r.amount||0); });
+      const today = new Date();
+      const buckets = { '0-30':0,'31-60':0,'61-90':0,'91-180':0,'181-365':0,'>365':0 };
+      Object.entries(inv).forEach(([no, info])=>{
+        const out = Math.max(0, info.amount - (paid[no]||0)); if(out<=0) return;
+        const days = Math.floor((today - info.date)/86400000);
+        let key='>365'; if(days<=30) key='0-30'; else if(days<=60) key='31-60'; else if(days<=90) key='61-90'; else if(days<=180) key='91-180'; else if(days<=365) key='181-365';
+        buckets[key]+= out;
+      });
+      const labels = Object.keys(buckets); const data = labels.map(k=> buckets[k]);
+      const ok = data.reduce((a,b)=>a+b,0) > 0;
+      showCardByCanvasId('arAging', ok);
+      if(ok) makeChart('arAging','bar', labels, [{label:'AR Outstanding', data}]);
+    } else {
+      showCardByCanvasId('arAging', false);
+    }
+
+    // --- AP Aging ---
+    if(PM.length){
+      const bills = {}; PH.forEach(r=>{ const m=toMonth(r.bill_date); if(!m || !inRange(m)) return; bills[r.bill_no] = { date: new Date(r.bill_date), amount: +r.gross_amount||0 }; });
+      const paid = {}; PM.forEach(r=>{ const ref=r.ref_bill_or_doc||''; if(!ref.startsWith('PN')) return; if(!bills[ref]) return; paid[ref] = (paid[ref]||0) + (+r.amount||0); });
+      const today = new Date();
+      const buckets = { '0-30':0,'31-60':0,'61-90':0,'91-180':0,'181-365':0,'>365':0 };
+      Object.entries(bills).forEach(([no, info])=>{
+        const out = Math.max(0, info.amount - (paid[no]||0)); if(out<=0) return;
+        const days = Math.floor((today - info.date)/86400000);
+        let key='>365'; if(days<=30) key='0-30'; else if(days<=60) key='31-60'; else if(days<=90) key='61-90'; else if(days<=180) key='91-180'; else if(days<=365) key='181-365';
+        buckets[key]+= out;
+      });
+      const labels = Object.keys(buckets); const data = labels.map(k=> buckets[k]);
+      const ok = data.reduce((a,b)=>a+b,0) > 0;
+      showCardByCanvasId('apAging', ok);
+      if(ok) makeChart('apAging','bar', labels, [{label:'AP Outstanding', data}]);
+    } else {
+      showCardByCanvasId('apAging', false);
+    }
+
+    // --- KPI Table ---
+    const kpiMonths = monthsSorted([...new Set([...months, ...Object.keys(purchMonth), ...Object.keys(vatMonth)])]);
+    const kpi = kpiMonths.map(m=>({
+      month:m,
+      sales_gross: salesMonth[m]?.gross||0,
+      purch_gross: purchMonth[m]?.gross||0,
+      vat_payable: vatMonth[m]? (vatMonth[m].out - vatMonth[m].in) : 0,
+    }));
+    const host = $('#kpiTableWrap'); host.innerHTML=''; host.appendChild(tableKPI(kpi));
+    $('#asOf').textContent = `Hiển thị: ${( $('#fromMonth').value || firstM )} → ${( $('#toMonth').value || lastM )}`;
+
+    attachExports();
+  }
+
+  function tableKPI(rows){
+    const tbl = document.createElement('table'); tbl.className = 'kpi';
+    tbl.innerHTML = `<thead><tr><th>Tháng</th><th>Bán (gross)</th><th>Mua (gross)</th><th>VAT phải nộp</th></tr></thead>`;
+    const tb = document.createElement('tbody');
+    rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.month}</td><td>${fmt.format(r.sales_gross||0)}</td><td>${fmt.format(r.purch_gross||0)}</td><td>${fmt.format(r.vat_payable||0)}</td>`; tb.appendChild(tr); });
+    tbl.appendChild(tb); return tbl;
+  }
+
+  function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      $('#meta').innerHTML = `<span class=badge>Đã nạp: ${file.name}</span> <span class=badge>Sheets: ${wb.SheetNames.join(', ')}</span>`;
+      window.__MISA_WB = wb; // store global for rebuilds
+      buildAll(wb);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // --- Self Tests ---
+  function wbFromObject(obj){
+    const wb = XLSX.utils.book_new();
+    Object.entries(obj).forEach(([name, rows])=>{
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    return wb;
+  }
+  function runTestCase(name){
+    const today = new Date();
+    const y = today.getFullYear();
+    const case1 = {
+      SALES_HEADERS: [
+        {invoice_no:'SI001', invoice_date:`${y}-01-15`, customer_code:'C1', customer_name:'Alpha', net_amount:1000000, vat_amount:100000, gross_amount:1100000},
+        {invoice_no:'SI002', invoice_date:`${y}-02-10`, customer_code:'C2', customer_name:'Beta',  net_amount:2000000, vat_amount:200000, gross_amount:2200000},
+      ]
+    };
+    const case2 = {
+      ...case1,
+      JOURNAL: [
+        {entry_date:`${y}-01-31`, document_no:'SI001', account_code:'511', drcr:'Có', amount:1000000},
+        {entry_date:`${y}-01-31`, document_no:'SI001', account_code:'632', drcr:'Nợ', amount:600000},
+        {entry_date:`${y}-02-28`, document_no:'SI002', account_code:'511', drcr:'Có', amount:2000000},
+        {entry_date:`${y}-02-28`, document_no:'SI002', account_code:'632', drcr:'Nợ', amount:1200000},
+      ]
+    };
+    const case3 = {
+      ...case2,
+      PURCHASE_HEADERS: [
+        {bill_no:'PN001', bill_date:`${y}-01-05`, vendor_code:'V1', vendor_name:'NCC A', net_amount:500000, vat_amount:50000, gross_amount:550000},
+      ],
+      BANK_TX: [
+        {txn_date:`${y}-01-20`, direction:'IN', amount:800000},
+        {txn_date:`${y}-01-25`, direction:'OUT', amount:300000},
+      ],
+      RECEIPTS: [ {ref_invoice:'SI001', amount:200000} ],
+      PAYMENTS: [ {ref_bill_or_doc:'PN001', amount:100000} ]
+    };
+
+    let obj = case1; if(name==='case2') obj = case2; if(name==='case3') obj = case3;
+    const wb = wbFromObject(obj);
+    $('#meta').innerHTML = `<span class=badge>Self‑test: ${name}</span> <span class=badge>Sheets: ${wb.SheetNames.join(', ')}</span>`;
+    window.__MISA_WB = wb; buildAll(wb);
+  }
+
+  document.getElementById('file').addEventListener('change', ev=>{ const f=ev.target.files?.[0]; if(!f) return; handleFile(f); });
+  document.getElementById('exportAllPdf').addEventListener('click', exportAllPDF);
+  document.getElementById('fromMonth').addEventListener('change', ()=> window.__MISA_WB && buildAll(window.__MISA_WB));
+  document.getElementById('toMonth').addEventListener('change', ()=> window.__MISA_WB && buildAll(window.__MISA_WB));
+  document.getElementById('topN').addEventListener('change', ()=> window.__MISA_WB && buildAll(window.__MISA_WB));
+  document.getElementById('runTests').addEventListener('click', ()=>{
+    // run all cases sequentially so user can swap quickly
+    const menu = document.createElement('div');
+    menu.className = 'pill';
+    menu.innerHTML = `Chọn test: <button class="btn" id="t1">case1</button> <button class="btn" id="t2">case2</button> <button class="btn" id="t3">case3</button>`;
+    document.querySelector('.toolbar').appendChild(menu);
+    document.getElementById('t1').onclick = ()=> runTestCase('case1');
+    document.getElementById('t2').onclick = ()=> runTestCase('case2');
+    document.getElementById('t3').onclick = ()=> runTestCase('case3');
+  });
+</script>
+</body>
+</html>
